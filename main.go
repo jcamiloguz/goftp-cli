@@ -98,7 +98,7 @@ func Interative(conn net.Conn, state *string) {
 			fmt.Printf("Enter channel to publish: ")
 			fmt.Scanf("%d", &channelToPublish)
 			SendFile(conn, filePath, channelToPublish)
-
+			os.Exit(0)
 		case 3:
 			fmt.Printf("Exiting\n")
 			os.Exit(0)
@@ -138,28 +138,12 @@ func SendFile(conn net.Conn, filePath string, channel int) error {
 	}
 	defer file.Close()
 
-	buff := make([]byte, 1024)
-	for {
-		n, err := file.Read(buff)
-		if err != nil {
-			if err == io.EOF {
-				fmt.Printf("Send all file: %d\n", n)
-				SendSuccesful(conn)
-				WaitForResponse(conn)
-				return nil
-			} else {
-				fmt.Printf("Error reading file: %s\n", err)
-				SendError(conn, err)
-				return err
-			}
-		}
-		// fmt.Printf("Send: %v", buff[:n])
-		_, err = conn.Write(buff[:n])
-		if err != nil {
-			fmt.Printf("Error: %s\n", err)
-			return err
-		}
+	err = CopyContent(conn, file)
+	if err != nil {
+		fmt.Printf("Error: %s\n", err)
+		return err
 	}
+	return nil
 }
 
 func CopyContent(dst io.Writer, src io.Reader) error {
@@ -223,26 +207,13 @@ func HearingChannel(conn net.Conn) error {
 		return err
 	}
 	defer file.Close()
-	for {
-		buf := make([]byte, 1024)
-		n, err := conn.Read(buf)
-
-		file.Write(buf[:n])
-		if err != nil {
-			if err == io.EOF {
-				fmt.Printf("receive file complete. \n")
-			} else {
-				fmt.Printf("conn.read() method execution error, error is:% v \n", err)
-				// delete file
-				err := os.Remove(fileName)
-				if err != nil {
-					fmt.Printf("Error: %s\n", err)
-				}
-			}
-			return nil
-		}
-
+	err = CopyContent(file, conn)
+	if err != nil {
+		fmt.Printf("Error: %s\n", err)
+		return err
 	}
+
+	return nil
 }
 
 func Publish(conn net.Conn, channel int, message string) {
