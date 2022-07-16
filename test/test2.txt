@@ -1,0 +1,1 @@
+str  fileName=x.txt size=0
