@@ -89,7 +89,9 @@ func Interative(conn net.Conn, state *string) {
 				fmt.Printf("Error: %s\n", err)
 				return
 			}
-			*state = "subscribed"
+			os.Exit(0)
+			return
+
 		case 2:
 			fmt.Printf("Enter file path: ")
 			var filePath string
