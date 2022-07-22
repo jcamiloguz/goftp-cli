@@ -4,11 +4,20 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 )
+
+func CopyContent(dst io.Writer, src io.Reader) error {
+	_, err := io.Copy(dst, src)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
 func ClearTerminal() {
 	clear := make(map[string]func()) //Initialize it
@@ -54,7 +63,7 @@ func GetActionId(action string) (ACTIONID, error) {
 	case "error":
 		return ERR, nil
 	default:
-		return ERR, errors.New("unknown actionsss")
+		return ERR, errors.New("unknown actions")
 	}
 }
 
