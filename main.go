@@ -13,16 +13,17 @@ const (
 	REG ACTIONID = iota
 	OUT
 	PUB
+	FILE
 	SUB
 	UNSUB
-	INFO
 	OK
 	ERR
 )
 
 type Action struct {
-	Id   ACTIONID
-	Args map[string]string
+	Id      ACTIONID
+	Args    map[string]string
+	payload []byte
 }
 
 var (

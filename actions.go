@@ -1,19 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"os"
 )
 
 func RegisterToServer(conn net.Conn) error {
 	fmt.Fprintf(conn, "register \n")
-	action, err := WaitForResponse(conn)
+	action, err := WaitForResponse(conn, nil)
 	if err != nil {
 		return err
 	}
 	if action.Id != OK {
-		return fmt.Errorf("Error expected OK, got %d, with args %v", action.Id, action.Args)
+		return fmt.Errorf("error expected OK, got %d, with args %v", action.Id, action.Args)
 	}
 	fmt.Println("Registered to server")
 	return nil
@@ -21,33 +23,34 @@ func RegisterToServer(conn net.Conn) error {
 
 func SubscribeToChannel(conn net.Conn, channel int) error {
 	if channel < 0 {
-		return fmt.Errorf("Channel number must be greater than 0")
+		return fmt.Errorf("channel number must be greater than 0")
 	}
 
 	fmt.Fprintf(conn, "subscribe channel=%d\n", channel)
-	action, err := WaitForResponse(conn)
+	action, err := WaitForResponse(conn, nil)
 	if err != nil {
 		return err
 	}
 
 	if action.Id != OK {
-		return fmt.Errorf("Error expected OK, got %d, with args %v", action.Id, action.Args)
+		return fmt.Errorf("error expected OK, got %d, with args %v", action.Id, action.Args)
 	}
 	return nil
 }
 
 func HearingChannel(conn net.Conn) error {
-	action, err := WaitForResponse(conn)
+	messageToPrint := "Hearing channel"
+	action, err := WaitForResponse(conn, &messageToPrint)
 	if err != nil {
 		return err
 	}
-	if action.Id != INFO {
-		return fmt.Errorf("Error expected INFO, got %d, with args %v", action.Id, action.Args)
+	if action.Id != PUB {
+		return fmt.Errorf("error expected INFO, got %d, with args %v", action.Id, action.Args)
 	}
 
 	fileName := action.Args["fileName"]
 	if fileName == "" {
-		return fmt.Errorf("Info Header missing: %s", fileName)
+		return fmt.Errorf("info header missing: %s", fileName)
 	}
 	file, err := os.Create(fileName)
 
@@ -56,10 +59,39 @@ func HearingChannel(conn net.Conn) error {
 		return err
 	}
 	defer file.Close()
-	err = CopyContent(file, conn)
-	if err != nil {
-		fmt.Printf("Error: %s\n", err)
-		return err
+	for {
+		buffeFull := make([]byte, 1024)
+		n, err := conn.Read(buffeFull)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			fmt.Printf("Error reading file: %s\n", err)
+			return err
+		}
+		// get action from buffer
+		action, err = NewAction(buffeFull[:n])
+		if err != nil {
+			fmt.Printf("Error creating action: %s\n", err)
+			return err
+		}
+		switch action.Id {
+		case FILE:
+			fmt.Println("Writing file")
+			bufferClean := bytes.Trim(action.payload, "\x00")
+			_, err = file.Write(bufferClean)
+			if err != nil {
+				fmt.Printf("Error writing file: %s\n", err)
+				return err
+			}
+		case OK:
+			fmt.Println("OK")
+			return nil
+		default:
+			fmt.Printf("Unknown action: %d\n", action.Id)
+
+		}
+
 	}
 
 	return nil
@@ -69,8 +101,12 @@ func Publish(conn net.Conn, channel int, message string) {
 	fmt.Fprintf(conn, "publish channel=%d %s\n", channel, message)
 }
 
-func WaitForResponse(conn net.Conn) (*Action, error) {
-	fmt.Println("waiting for response")
+func WaitForResponse(conn net.Conn, msg *string) (*Action, error) {
+	if msg == nil {
+		fmt.Println("waiting for response")
+	} else {
+		fmt.Printf("%s\n", *msg)
+	}
 	buf := make([]byte, 50)
 
 	n, err := conn.Read(buf)
@@ -84,7 +120,7 @@ func WaitForResponse(conn net.Conn) (*Action, error) {
 	}
 	fmt.Printf("response: %d\n", action.Id)
 	if action.Id == ERR {
-		return action, fmt.Errorf("Error Response")
+		return action, fmt.Errorf("error response")
 	} else {
 		return action, nil
 	}
@@ -128,11 +164,11 @@ func SendFile(conn net.Conn, filePath string, channel int) error {
 		fmt.Printf("Error: %s\n", err)
 		return err
 	}
-	_, err = WaitForResponse(conn)
-	if err != nil {
-		fmt.Printf("Error: %s\n", err)
-		return err
-	}
+	// _, err = WaitForResponse(conn, nil)
+	// if err != nil {
+	// 	fmt.Printf("Error: %s\n", err)
+	// 	return err
+	// }
 
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -141,10 +177,45 @@ func SendFile(conn net.Conn, filePath string, channel int) error {
 	}
 	defer file.Close()
 
-	err = CopyContent(conn, file)
+	for {
+		buffeFull := make([]byte, 1024)
+		contentBuffer := make([]byte, 1019)
+		n, err := file.Read(contentBuffer)
+		if err != nil {
+			if err == io.EOF {
+				_, err := conn.Write([]byte("ok \n"))
+				if err != nil {
+					return err
+				}
+				break
+			}
+			fmt.Printf("Error reading file: %s\n", err)
+			return err
+		}
+		// add FILE header to buffer
+		contentHeader := "file "
+
+		//full buffer is contentHeader + contentBuffer
+		copy(buffeFull, []byte(contentHeader))
+		copy(buffeFull[len(contentHeader):], contentBuffer[:n])
+
+		_, err = conn.Write(buffeFull)
+		if err != nil {
+			fmt.Printf("Error: %s\n", err)
+			return err
+		}
+
+		// fmt.Printf("Send: %v\n", string(buffeFull))
+	}
+	action, err := WaitForResponse(conn, nil)
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
 		return err
 	}
+	if action.Id != OK {
+		return fmt.Errorf("error response")
+	}
+	fmt.Printf("File sent\n")
+
 	return nil
 }

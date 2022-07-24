@@ -52,12 +52,12 @@ func GetActionId(action string) (ACTIONID, error) {
 		return OUT, nil
 	case "publish":
 		return PUB, nil
+	case "file":
+		return FILE, nil
 	case "subscribe":
 		return SUB, nil
 	case "unsubscribe":
 		return UNSUB, nil
-	case "info":
-		return INFO, nil
 	case "ok":
 		return OK, nil
 	case "error":
@@ -80,14 +80,23 @@ func NewAction(message []byte) (*Action, error) {
 			args[string(arg)] = ""
 		}
 	}
-
+	// separe message by the first space
+	fmt.Printf("cmd:%s\n", cmd)
 	actionId, err := GetActionId(string(cmd))
 	if err != nil {
 		return nil, err
 	}
+	var payload []byte
+	if actionId == FILE {
+		content := bytes.Split(message, []byte(" "))[1:]
+		payload = bytes.Join(content, []byte(" "))
+	} else {
+		payload = nil
+	}
 	return &Action{
-		Id:   actionId,
-		Args: args,
+		Id:      actionId,
+		Args:    args,
+		payload: payload,
 	}, err
 
 }
@@ -100,12 +109,12 @@ func GetActionText(action ACTIONID) string {
 		return "out"
 	case PUB:
 		return "publish"
+	case FILE:
+		return "file"
 	case SUB:
 		return "subscribe"
 	case UNSUB:
 		return "unsubscribe"
-	case INFO:
-		return "info"
 	case OK:
 		return "ok"
 	case ERR:

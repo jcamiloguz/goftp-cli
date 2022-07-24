@@ -12,31 +12,32 @@ func Interative(conn net.Conn) error {
 	if err != nil {
 		return err
 	}
+	for {
 
-	command, err := menu()
-	if err != nil {
-		return err
-	}
-
-	switch command {
-	case "1":
-		err = subscribe(conn)
+		command, err := menu()
 		if err != nil {
 			return err
 		}
-	case "2":
-		err = publish(conn)
-		if err != nil {
-			return err
+
+		switch command {
+		case "1":
+			err = subscribe(conn)
+			if err != nil {
+				return err
+			}
+		case "2":
+			err = publish(conn)
+			if err != nil {
+				return err
+			}
+		case "3":
+			fmt.Printf("Exiting\n")
+			os.Exit(0)
+		default:
+			fmt.Printf("Unknown command: %s\n", command)
 		}
-	case "3":
-		fmt.Printf("Exiting\n")
-		os.Exit(0)
-	default:
-		fmt.Printf("Unknown command: %s\n", command)
 	}
 
-	return nil
 }
 
 func menu() (string, error) {
@@ -45,7 +46,7 @@ func menu() (string, error) {
 	fmt.Scanf("%d", &command)
 	ClearTerminal()
 	if command < 1 || command > 3 {
-		return "", fmt.Errorf("Unknown command %d", command)
+		return "", fmt.Errorf("unknown command %d", command)
 	}
 
 	return fmt.Sprintf("%d", command), nil
@@ -59,13 +60,15 @@ func subscribe(conn net.Conn) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("hearing %d channel\n", channel)
-	err = HearingChannel(conn)
-	if err != nil {
-		fmt.Printf("Error: %s\n", err)
-		return err
+	for {
+
+		err = HearingChannel(conn)
+		if err != nil {
+			fmt.Printf("Error: %s\n", err)
+			return err
+		}
 	}
-	return err
+
 }
 
 func publish(conn net.Conn) error {
