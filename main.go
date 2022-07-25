@@ -27,9 +27,11 @@ type Action struct {
 }
 
 var (
-	port   = flag.Int("p", 3090, "port")
-	host   = flag.String("h", "localhost", "host")
-	action = flag.String("a", "interative", "action")
+	port     = flag.Int("p", 3090, "port")
+	host     = flag.String("h", "localhost", "host")
+	action   = flag.String("a", "interative", "action")
+	channel  = flag.Int("c", 0, "channel")
+	filePath = flag.String("f", "", "file path")
 )
 
 func main() {
@@ -45,11 +47,38 @@ func main() {
 		case "interative":
 			Interative(conn)
 		case "publish":
-			// Publish(conn, "test", "test")
-		case "subscribe":
-			// Subscribe(conn, "test")
-		default:
+			// register to server and publish to channel, then exit
 
+			err := RegisterToServer(conn)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = SendFile(conn, *filePath, *channel)
+			if err != nil {
+				log.Fatal(err)
+			}
+			done <- struct{}{}
+
+		case "subscribe":
+
+			err := RegisterToServer(conn)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = SubscribeToChannel(conn, *channel)
+			if err != nil {
+				log.Fatal(err)
+			}
+			for {
+
+				err = HearingChannel(conn)
+				if err != nil {
+					errMsg := fmt.Sprintf("Error: %s\n", err)
+					log.Fatal(errMsg)
+				}
+			}
+		default:
+			log.Fatal("unknown action")
 		}
 		done <- struct{}{}
 	}()

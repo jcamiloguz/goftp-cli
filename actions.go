@@ -1,12 +1,14 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"strconv"
 )
+
+const BUFFER_SIZE = 1024
 
 func RegisterToServer(conn net.Conn) error {
 	fmt.Fprintf(conn, "register \n")
@@ -45,13 +47,27 @@ func HearingChannel(conn net.Conn) error {
 		return err
 	}
 	if action.Id != PUB {
-		return fmt.Errorf("error expected INFO, got %d, with args %v", action.Id, action.Args)
+		return fmt.Errorf("error expected PUB, got %d, with args %v", action.Id, action.Args)
 	}
 
 	fileName := action.Args["fileName"]
+	size := action.Args["size"]
 	if fileName == "" {
 		return fmt.Errorf("info header missing: %s", fileName)
 	}
+	//parse int
+	sizeInt, err := strconv.Atoi(size)
+	if err != nil {
+		return fmt.Errorf("info header missing: %s", size)
+	}
+
+	chunks := sizeInt / (BUFFER_SIZE - 5)
+	garbage := (BUFFER_SIZE - 5) - (sizeInt % (BUFFER_SIZE - 5))
+	if garbage > 0 {
+		chunks++
+	}
+	fmt.Printf("size:%dgarbage: %d, chunks:%d\n", sizeInt, garbage, chunks)
+
 	file, err := os.Create(fileName)
 
 	if err != nil {
@@ -59,8 +75,9 @@ func HearingChannel(conn net.Conn) error {
 		return err
 	}
 	defer file.Close()
-	for {
-		buffeFull := make([]byte, 1024)
+	for i := 1; i < chunks+2; i++ {
+
+		buffeFull := make([]byte, BUFFER_SIZE)
 		n, err := conn.Read(buffeFull)
 		if err != nil {
 			if err == io.EOF {
@@ -69,21 +86,37 @@ func HearingChannel(conn net.Conn) error {
 			fmt.Printf("Error reading file: %s\n", err)
 			return err
 		}
-		// get action from buffer
+		fmt.Printf("buffer:%s\n", buffeFull[:n])
+
 		action, err = NewAction(buffeFull[:n])
 		if err != nil {
 			fmt.Printf("Error creating action: %s\n", err)
 			return err
 		}
+
 		switch action.Id {
 		case FILE:
+
 			fmt.Println("Writing file")
-			bufferClean := bytes.Trim(action.payload, "\x00")
-			_, err = file.Write(bufferClean)
-			if err != nil {
-				fmt.Printf("Error writing file: %s\n", err)
-				return err
+
+			if i >= chunks && garbage > 0 {
+				fmt.Println("Cleaning last chunk")
+				payload := action.payload[:BUFFER_SIZE-5-garbage]
+				_, err = file.Write(payload)
+				if err != nil {
+					fmt.Printf("Error writing file: %s\n", err)
+					return err
+				}
+				// fmt.Printf("writed: %s\n", string(payload))
+
+			} else {
+				_, err = file.Write(action.payload)
+				if err != nil {
+					fmt.Printf("Error writing file: %s\n", err)
+					return err
+				}
 			}
+
 		case OK:
 			fmt.Println("OK")
 			return nil
@@ -97,17 +130,13 @@ func HearingChannel(conn net.Conn) error {
 	return nil
 }
 
-func Publish(conn net.Conn, channel int, message string) {
-	fmt.Fprintf(conn, "publish channel=%d %s\n", channel, message)
-}
-
 func WaitForResponse(conn net.Conn, msg *string) (*Action, error) {
 	if msg == nil {
 		fmt.Println("waiting for response")
 	} else {
 		fmt.Printf("%s\n", *msg)
 	}
-	buf := make([]byte, 50)
+	buf := make([]byte, BUFFER_SIZE)
 
 	n, err := conn.Read(buf)
 	if err != nil {
@@ -128,7 +157,7 @@ func WaitForResponse(conn net.Conn, msg *string) (*Action, error) {
 }
 
 func SendSuccesful(conn net.Conn) error {
-	buf := make([]byte, 1024)
+	buf := make([]byte, BUFFER_SIZE)
 	okCmd := "OK\n"
 	copy(buf, []byte(okCmd))
 	fmt.Printf("Send: %v", buf)
@@ -140,7 +169,7 @@ func SendSuccesful(conn net.Conn) error {
 }
 
 func SendError(conn net.Conn, errorToSend error) error {
-	buf := make([]byte, 1024)
+	buf := make([]byte, BUFFER_SIZE)
 	errorMsg := fmt.Sprintf("ERR msg=%s\n", errorToSend.Error())
 	copy(buf, []byte(errorMsg))
 	_, err := conn.Write(buf)
@@ -155,7 +184,7 @@ func SendFile(conn net.Conn, filePath string, channel int) error {
 		fmt.Printf("OS. Stat() function execution error, error is:% v \n", err)
 		return err
 	}
-	sizeInKb := fileInfo.Size() / 1024
+	sizeInKb := fileInfo.Size() / BUFFER_SIZE
 	fmt.Printf("file %s %dKb\n", fileInfo.Name(), sizeInKb)
 
 	publishMsg := fmt.Sprintf("publish channel=%d  fileName=%s size=%d\n", channel, fileInfo.Name(), fileInfo.Size())
@@ -178,7 +207,7 @@ func SendFile(conn net.Conn, filePath string, channel int) error {
 	defer file.Close()
 
 	for {
-		buffeFull := make([]byte, 1024)
+		buffeFull := make([]byte, BUFFER_SIZE)
 		contentBuffer := make([]byte, 1019)
 		n, err := file.Read(contentBuffer)
 		if err != nil {
