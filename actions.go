@@ -236,6 +236,7 @@ func SendFile(conn net.Conn, filePath string, channel int) error {
 
 		// fmt.Printf("Send: %v\n", string(buffeFull))
 	}
+
 	action, err := WaitForResponse(conn, nil)
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
