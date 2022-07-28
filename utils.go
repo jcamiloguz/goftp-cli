@@ -44,23 +44,23 @@ func ClearTerminal() {
 	}
 }
 func GetActionId(action string) (ACTIONID, error) {
-	action = strings.ToLower(action)
+	action = strings.ToUpper(action)
 	switch action {
-	case "register":
+	case "REG":
 		return REG, nil
-	case "out":
+	case "OUT":
 		return OUT, nil
-	case "publish":
+	case "PUB":
 		return PUB, nil
-	case "file":
+	case "FILE":
 		return FILE, nil
-	case "subscribe":
+	case "SUB":
 		return SUB, nil
-	case "unsubscribe":
+	case "UNSUB":
 		return UNSUB, nil
-	case "ok":
+	case "OK":
 		return OK, nil
-	case "error":
+	case "ERR":
 		return ERR, nil
 	default:
 		return ERR, errors.New("unknown actions")

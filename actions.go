@@ -11,7 +11,7 @@ import (
 const BUFFER_SIZE = 1024
 
 func RegisterToServer(conn net.Conn) error {
-	fmt.Fprintf(conn, "register \n")
+	fmt.Fprintf(conn, "REG \n")
 	action, err := WaitForResponse(conn, nil)
 	if err != nil {
 		return err
@@ -28,7 +28,7 @@ func SubscribeToChannel(conn net.Conn, channel int) error {
 		return fmt.Errorf("channel number must be greater than 0")
 	}
 
-	fmt.Fprintf(conn, "subscribe channel=%d\n", channel)
+	fmt.Fprintf(conn, "SUB channel=%d\n", channel)
 	action, err := WaitForResponse(conn, nil)
 	if err != nil {
 		return err
@@ -185,9 +185,9 @@ func SendFile(conn net.Conn, filePath string, channel int) error {
 		return err
 	}
 	sizeInKb := fileInfo.Size() / BUFFER_SIZE
-	fmt.Printf("file %s %dKb\n", fileInfo.Name(), sizeInKb)
+	fmt.Printf("FILE %s %dKb\n", fileInfo.Name(), sizeInKb)
 
-	publishMsg := fmt.Sprintf("publish channel=%d  fileName=%s size=%d\n", channel, fileInfo.Name(), fileInfo.Size())
+	publishMsg := fmt.Sprintf("PUB channel=%d  fileName=%s size=%d\n", channel, fileInfo.Name(), fileInfo.Size())
 	_, err = conn.Write([]byte(publishMsg))
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
@@ -222,7 +222,7 @@ func SendFile(conn net.Conn, filePath string, channel int) error {
 			return err
 		}
 		// add FILE header to buffer
-		contentHeader := "file "
+		contentHeader := "FILE "
 
 		//full buffer is contentHeader + contentBuffer
 		copy(buffeFull, []byte(contentHeader))
